@@ -27,8 +27,7 @@ Dans les bibliothèques de deep learning, l’opération appelée convolution co
 
 $$
 y_o[i] = b_o + \sum_{c=1}^{C_{in}} \sum_{k=0}^{K-1} w_{o,c}[k] \, x_c[s i + d k]
-
-y$$
+$$
 
 ### Convolution 3D
 
@@ -323,7 +322,218 @@ Les résultats sont cohérents.
 
 ---
 
-## 6. Résumé des réponses finales
+## 6. Exercice 2 – Dimensions et paramètres d’un CNN 1D (ECG)
+
+On traite des ECG 12 dérivations échantillonnés à 500 Hz pendant 2 s. Un batch a la forme `(32, 12, 1000)`.
+
+```python
+net = nn.Sequential(
+    nn.Conv1d(12, 64, kernel_size=7, stride=2, padding=3),       # (a)
+    nn.ReLU(),
+    nn.MaxPool1d(2),                                              # (b)
+    nn.Conv1d(64, 128, kernel_size=5, padding=2),                 # (c)
+    nn.ReLU(),
+    nn.AdaptiveAvgPool1d(1),                                      # (d)
+    nn.Flatten(),
+    nn.Linear(128, 5))                                            # (e)
+```
+
+### 6.1. Forme du tenseur après chaque couche
+
+On utilise la formule standard pour une convolution 1D :
+
+$$
+L_{out} = \left\lfloor \frac{L_{in} + 2p - K}{s} \right\rfloor + 1
+$$
+
+#### (a) Conv1d(12, 64, kernel_size=7, stride=2, padding=3)
+
+Input : `(32, 12, 1000)`
+
+$$
+L_{out} = \left\lfloor \frac{1000 + 2\times 3 - 7}{2} \right\rfloor + 1
+= \left\lfloor \frac{999}{2} \right\rfloor + 1 = 499 + 1 = 500
+$$
+
+Sortie :
+
+$$
+(32, 64, 500)
+$$
+
+#### (b) ReLU
+
+Aucune modification de forme :
+
+$$
+(32, 64, 500)
+$$
+
+#### (c) MaxPool1d(2)
+
+Pool size = 2, stride par défaut = 2.
+
+$$
+L_{out} = \left\lfloor \frac{500 - 2}{2} \right\rfloor + 1 = 249 + 1 = 250
+$$
+
+Sortie :
+
+$$
+(32, 64, 250)
+$$
+
+#### (d) Conv1d(64, 128, kernel_size=5, padding=2)
+
+Ici, stride = 1 par défaut.
+
+$$
+L_{out} = 250 + 2\times2 - 5 + 1 = 250
+$$
+
+Sortie :
+
+$$
+(32, 128, 250)
+$$
+
+#### (e) ReLU
+
+Aucune modification de forme :
+
+$$
+(32, 128, 250)
+$$
+
+#### (f) AdaptiveAvgPool1d(1)
+
+La dimension temporelle est réduite à 1 :
+
+$$
+(32, 128, 1)
+$$
+
+#### (g) Flatten
+
+$$
+(32, 128, 1) \rightarrow (32, 128)
+$$
+
+#### (h) Linear(128, 5)
+
+$$
+(32, 5)
+$$
+
+Donc le réseau sort :
+
+$$
+(32, 5)
+$$
+
+---
+
+### 6.2. Nombre de paramètres de chaque couche
+
+Formule pour une convolution 1D :
+
+$$
+\#\text{poids} = C_{out} \times C_{in} \times K
+$$
+
+$$
+\#\text{biais} = C_{out}
+$$
+
+#### (a) Conv1d(12, 64, kernel_size=7)
+
+- poids = $64 \times 12 \times 7 = 5376$
+- biais = $64$
+- total = $5440$
+
+#### (d) Conv1d(64, 128, kernel_size=5)
+
+- poids = $128 \times 64 \times 5 = 40960$
+- biais = $128$
+- total = $41088$
+
+#### (h) Linear(128, 5)
+
+- poids = $128 \times 5 = 640$
+- biais = $5$
+- total = $645$
+
+Total :
+
+$$
+5440 + 41088 + 645 = 47173
+$$
+
+Donc le nombre total de paramètres est :
+
+$$
+47\,173
+$$
+
+---
+
+### 6.3. MACs de la couche (a)
+
+Une opération MAC correspond à une multiplication suivie d’une accumulation.
+
+Pour une convolution 1D :
+
+$$
+\text{MACs} = L_{out} \times C_{out} \times C_{in} \times K
+$$
+
+Ici :
+
+- $L_{out} = 500$
+- $C_{out} = 64$
+- $C_{in} = 12$
+- $K = 7$
+
+Donc :
+
+$$
+\text{MACs} = 500 \times 64 \times 12 \times 7 = 2\,688\,000
+$$
+
+La couche (a) demande donc :
+
+$$
+2\,688\,000 \text{ MACs pour un exemple}
+$$
+
+---
+
+### 6.4. Pourquoi utiliser AdaptiveAvgPool1d(1) ?
+
+Sans `AdaptiveAvgPool1d(1)`, on aurait un `Flatten` direct et la dimension de sortie dépendrait de la durée du signal.
+
+Exemple :
+
+- si la durée change, le nombre de neurones après flatten change aussi ;
+- donc la couche linéaire finale devrait changer.
+
+Avec `AdaptiveAvgPool1d(1)` :
+
+- on réduit toujours la séquence à une seule position temporelle ;
+- la sortie reste de taille fixe : $(128, 1)$ ;
+- la couche linéaire finale reçoit toujours 128 caractéristiques.
+
+Cela donne au réseau une propriété très utile :
+
+- il est plus robuste à la durée du signal ;
+- il peut traiter des séquences de tailles différentes avec la même architecture ;
+- il capture une représentation globale de la séquence.
+
+C’est utile pour les ECG, les séries temporelles, les signaux biologiques, etc.
+
+---
+
+## 7. Résumé des réponses finales
 
 Pour l’exercice 1 :
 
@@ -353,9 +563,16 @@ y = [-2, 1]
 
 6. Toutes les tailles de sortie sont vérifiées par la formule générale.
 
+Pour l’exercice 2 :
+
+- formes finales : `(32, 5)`
+- paramètres totaux : `47 173`
+- MACs de la couche (a) : `2 688 000`
+- `AdaptiveAvgPool1d(1)` rend le réseau indépendant de la durée du signal.
+
 ---
 
-## 7. Conseils pour bien comprendre les convolutions
+## 8. Conseils pour bien comprendre les convolutions
 
 Voici les points les plus importants à retenir :
 
@@ -367,7 +584,7 @@ Voici les points les plus importants à retenir :
 
 ---
 
-## 8. Conclusion
+## 9. Conclusion
 
 Les convolutions 1D et 3D reposent sur la même idée de base : appliquer un noyau sur des fenêtres locales de données pour extraire des caractéristiques. La différence réside dans la dimension des données et dans le nombre d’axes sur lesquels on se déplace.
 
